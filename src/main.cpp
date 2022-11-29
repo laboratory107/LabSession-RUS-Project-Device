@@ -12,18 +12,17 @@
 #include <SerialLogger.h>
 #include <AzIoTSasToken.h>
 
-
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 
 az_iot_hub_client client;
 
-#define HOST "rus22btomas.azure-devices.net"                  //[Azure IoT host name].azure-devices.net
-#define DEVICE_KEY "S38l1tt9EHko43+Un7A0d+KKiv/rBNaQKpiP9lh2HA0=" // Azure Primary key for device
+#define HOST ".."                  //[Azure IoT host name].azure-devices.net
+#define DEVICE_KEY ".." // Azure Primary key for device
 #define TOKEN_DURATION 60
 
 const char *azureHost = HOST;
-const char *deviceId = "rus22-btomas-esp32";
+const char *deviceId = "..";
 
 const char *labSSID = "TheLabIOT";
 const char *labPass = "Yaay!ICanTalkNow";
@@ -42,6 +41,53 @@ AzIoTSasToken sasToken(
     AZ_SPAN_FROM_STR(DEVICE_KEY),
     AZ_SPAN_FROM_BUFFER(sasSignatureBuffer),
     AZ_SPAN_FROM_BUFFER(mqttPassword));
+
+void connectToWiFi()
+{
+  Logger.Info("Connecting to WIFI SSID " + String(labSSID));
+
+  wifiClient.setCACert((const char *)ca_pem);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(labSSID, labPass);
+  Logger.Info("Connecting");
+
+  short timeoutCounter = 0;
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(500);
+
+    timeoutCounter++;
+    if (timeoutCounter >= 20)
+      ESP.restart();
+  }
+
+  Logger.Info("WiFi connected, IP address: " + WiFi.localIP().toString());
+}
+
+void mqttReconnect()
+{
+  while (!mqttClient.connected())
+  {
+    Logger.Info("Attempting MQTT connection...");
+    const char *mqttPassword = (const char *)az_span_ptr(sasToken.Get());
+    Logger.Info(mqttClientId);
+    Logger.Info(mqttPassword);
+    Logger.Info(mqttUsername);
+    Logger.Info(String(mqttPort));
+    if (mqttClient.connect(mqttClientId, mqttUsername, mqttPassword))
+    {
+      Logger.Info("MQTT connected");
+      mqttClient.subscribe(mqttC2DTopic);
+    }
+    else
+    {
+      Logger.Info("Trying again in 5 seconds");
+      delay(5000);
+    }
+  }
+}
 
 bool initIoTHub()
 {
@@ -81,23 +127,15 @@ bool initIoTHub()
   return true;
 }
 
-void connectToWiFi()
-{
-  
-}
-
-void mqttReconnect()
-{
-
-}
-bool connectMQTT()
-{
-  return true;
-}
 void callback(char *topic, byte *payload, unsigned int length)
 {
+  payload[length] = '\0';
+  String message = String((char *)payload);
+
+  Logger.Info("Callback:" + String(topic) + ": " + message);
 }
-void initializeTime()
+
+void initializeTime() // MANDATORY or SAS tokens won't generate
 {
   Logger.Info("Setting time using SNTP");
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -113,15 +151,45 @@ void initializeTime()
   }
 }
 
-void setup() {
+bool connectMQTT()
+{
+  mqttClient.setBufferSize(1024);
+
+  Logger.Info("Generating SAS token");
+  if (sasToken.Generate(TOKEN_DURATION) != 0)
+  {
+    Logger.Error("Failed generating SAS token");
+    return false;
+  }
+  else
+    Logger.Info("SAS token generated");
+
+  mqttClient.setServer(mqttBrokerURI, mqttPort);
+  mqttClient.setCallback(callback);
+
+  return true;
+}
+
+void setup()
+{
   connectToWiFi();
   initializeTime();
 
   if (initIoTHub())
     connectMQTT();
-    //TODO: publish online status
+  char topic[200];
+  
+  az_iot_hub_client_telemetry_get_publish_topic(&client,NULL, topic, 200, NULL );
+  Logger.Info(String(topic));
+  mqttClient.publish(topic,"Online");//https://github.com/Azure/azure-iot-explorer/releases
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
+void loop()
+{
+  if (!mqttClient.connected())
+    mqttReconnect();
+  if (sasToken.IsExpired())
+    connectMQTT();
+
+  mqttClient.loop();
 }
