@@ -172,16 +172,22 @@ bool connectMQTT()
 
 void setup()
 {
-  connectToWiFi();
+ connectToWiFi();
   initializeTime();
 
   if (initIoTHub())
+  {
     connectMQTT();
+    delay(200);
+    mqttReconnect();
+    delay(200);
+  }
   char topic[200];
   
   az_iot_hub_client_telemetry_get_publish_topic(&client,NULL, topic, 200, NULL );
   Logger.Info(String(topic));
   mqttClient.publish(topic,"Online");//https://github.com/Azure/azure-iot-explorer/releases
+  Logger.Info("Setup done");
 }
 
 void loop()
