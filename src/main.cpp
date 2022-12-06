@@ -186,7 +186,7 @@ void setup()
   
   az_iot_hub_client_telemetry_get_publish_topic(&client,NULL, topic, 200, NULL );
   Logger.Info(String(topic));
-  mqttClient.publish(topic,"Online");//https://github.com/Azure/azure-iot-explorer/releases
+  mqttClient.publish(topic,"Device001");//https://github.com/Azure/azure-iot-explorer/releases
   Logger.Info("Setup done");
 }
 
