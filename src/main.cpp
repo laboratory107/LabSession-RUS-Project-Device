@@ -12,6 +12,9 @@
 #include <SerialLogger.h>
 #include <AzIoTSasToken.h>
 
+#include <ArduinoJson.h>
+#include <DHTesp.h>
+
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 
@@ -170,6 +173,81 @@ bool connectMQTT()
   return true;
 }
 
+char topic[200];
+
+int dhtPin = 22;
+int lightPin = 36;
+int buttonHappyPin = 4;
+int buttonSadPin = 5;
+short lastSentimentStatus = 4;
+
+void IRAM_ATTR buttonISR(void* buttonPin) {
+    int* pinPtr = (int*)buttonPin; // Convert void pointer to a int pointer
+    int pin = *pinPtr; // Get the value that the pointer points to
+
+    if (pin == buttonSadPin) 
+      lastSentimentStatus = 0;
+    else
+      lastSentimentStatus = 1;
+}
+
+void setupButtonInterrupts() {
+  pinMode(buttonHappyPin, INPUT_PULLUP);
+  pinMode(buttonSadPin, INPUT_PULLUP);
+
+  attachInterruptArg(buttonHappyPin, buttonISR, &buttonHappyPin, FALLING);
+  attachInterruptArg(buttonSadPin, buttonISR, &buttonSadPin, FALLING);
+}
+
+int getLight() {
+  int lightSensorPin = lightPin;
+  return analogRead(lightSensorPin);
+}
+
+DHTesp dht;
+void setupDHTSensor() {
+  dht.setup(dhtPin, DHTesp::DHT11);
+}
+
+String getTelemetryData() {
+  StaticJsonDocument<128> doc;
+
+  doc["Sentiment"]["Status"] = lastSentimentStatus;
+
+  JsonObject Ambient = doc.createNestedObject("Ambient");
+  Ambient["Temperature"] = dht.getTemperature();
+  Ambient["Humidity"] = dht.getHumidity();
+  Ambient["Light"] = getLight();
+  doc["DeviceID"] = 1;
+
+  String json;
+  serializeJson(doc, json);
+  
+  Serial.println("JSON: " + json);
+  lastSentimentStatus = 4;
+
+  return json;
+}
+
+void sendTelemetryData() {
+  String telemetryData = getTelemetryData();
+  mqttClient.publish(topic, telemetryData.c_str());
+  mqttClient.publish(topic,"Device001");//https://github.com/Azure/azure-iot-explorer/releases
+}
+
+long lastTime, currentTime = 0;
+int interval = 5000;
+void checkTelemetry() {
+  currentTime = millis();
+
+  if (currentTime - lastTime >= interval) {
+    Logger.Info("Sending telemetry...");
+    sendTelemetryData();
+
+    lastTime = currentTime;
+  }
+}
+
 void setup()
 {
  connectToWiFi();
@@ -182,12 +260,14 @@ void setup()
     mqttReconnect();
     delay(200);
   }
-  char topic[200];
   
   az_iot_hub_client_telemetry_get_publish_topic(&client,NULL, topic, 200, NULL );
   Logger.Info(String(topic));
   mqttClient.publish(topic,"Device001");//https://github.com/Azure/azure-iot-explorer/releases
   Logger.Info("Setup done");
+
+  setupButtonInterrupts();
+  setupDHTSensor();
 }
 
 void loop()
@@ -198,4 +278,5 @@ void loop()
     connectMQTT();
 
   mqttClient.loop();
+  checkTelemetry();
 }
