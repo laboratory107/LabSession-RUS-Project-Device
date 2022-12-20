@@ -201,7 +201,6 @@ az_span generate_sas_token(
     Logger.Error("Failed generating SAS token signed signature");
     return AZ_SPAN_EMPTY;
   }
-  Logger.Info("Entering4 something...");
 
   // Get the resulting MQTT password, passing the base64 encoded, HMAC signed
   // bytes.
@@ -214,7 +213,6 @@ az_span generate_sas_token(
       (char*)az_span_ptr(sas_token),
       az_span_size(sas_token),
       &mqtt_password_length);
-  Logger.Info("Entering5 something...");
 
   if (az_result_failed(rc))
   {
@@ -243,8 +241,6 @@ AzIoTSasToken::AzIoTSasToken(
 
 int AzIoTSasToken::Generate(unsigned int expiryTimeInMinutes)
 {
-    Logger.Info("Entering something...");
-
   this->sasToken = generate_sas_token(
       this->client,
       this->deviceKey,
@@ -252,7 +248,6 @@ int AzIoTSasToken::Generate(unsigned int expiryTimeInMinutes)
       expiryTimeInMinutes,
       this->sasTokenBuffer);
 
-  Logger.Info("Setup something...");
   if (az_span_is_content_equal(this->sasToken, AZ_SPAN_EMPTY))
   {
     Logger.Error("Failed generating SAS token");

@@ -174,34 +174,16 @@ bool connectMQTT()
 }
 
 char topic[200];
-void setup()
-{
- connectToWiFi();
-  initializeTime();
-
-  if (initIoTHub())
-  {
-    connectMQTT();
-    delay(200);
-    mqttReconnect();
-    delay(200);
-  }
-  
-  az_iot_hub_client_telemetry_get_publish_topic(&client,NULL, topic, 200, NULL );
-  Logger.Info(String(topic));
-  mqttClient.publish(topic,"Device001");//https://github.com/Azure/azure-iot-explorer/releases
-  Logger.Info("Setup done");
-}
-
 
 int dhtPin = 22;
 int lightPin = 36;
 int buttonHappyPin = 4;
 int buttonSadPin = 5;
-short lastSentimentStatus = 0;
+short lastSentimentStatus = 4;
 
 void IRAM_ATTR buttonISR(void* buttonPin) {
-    int pin = *(int*)buttonPin;
+    int* pinPtr = (int*)buttonPin; // Convert void pointer to a int pointer
+    int pin = *pinPtr; // Get the value that the pointer points to
 
     if (pin == buttonSadPin) 
       lastSentimentStatus = 0;
@@ -240,6 +222,9 @@ String getTelemetryData() {
 
   String json;
   serializeJson(doc, json);
+  
+  Serial.println("JSON: " + json);
+  lastSentimentStatus = 4;
 
   return json;
 }
@@ -247,6 +232,7 @@ String getTelemetryData() {
 void sendTelemetryData() {
   String telemetryData = getTelemetryData();
   mqttClient.publish(topic, telemetryData.c_str());
+  mqttClient.publish(topic,"Device001");//https://github.com/Azure/azure-iot-explorer/releases
 }
 
 long lastTime, currentTime = 0;
@@ -262,14 +248,23 @@ void checkTelemetry() {
   }
 }
 
-
 void setup()
 {
-  connectToWiFi();
+ connectToWiFi();
   initializeTime();
 
   if (initIoTHub())
+  {
     connectMQTT();
+    delay(200);
+    mqttReconnect();
+    delay(200);
+  }
+  
+  az_iot_hub_client_telemetry_get_publish_topic(&client,NULL, topic, 200, NULL );
+  Logger.Info(String(topic));
+  mqttClient.publish(topic,"Device001");//https://github.com/Azure/azure-iot-explorer/releases
+  Logger.Info("Setup done");
 
   setupButtonInterrupts();
   setupDHTSensor();
@@ -283,6 +278,5 @@ void loop()
     connectMQTT();
 
   mqttClient.loop();
-
   checkTelemetry();
 }
