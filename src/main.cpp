@@ -40,13 +40,13 @@ AzIoTSasToken sasToken(
 	AZ_SPAN_FROM_BUFFER(
 		mqttPassword));	 // Authentication token for our specific device
 
-const char* deviceId = "..";  // Device ID as specified in the list of devices on IoT Hub
+const char* deviceId = "Dev001";  // Device ID as specified in the list of devices on IoT Hub
 
 /* Pin definitions and library instance(s) */
 const int lightPin = 35;
 const int dhtPin = 23; // It used to be tied to 21, but 21 and 22 are default pins for I2C communication (for OLED screens eg.), so we will leave them unused  
 
-const int buttonHappyPin = 2;
+const int buttonHappyPin = 27;
 const int buttonSadPin = 4;
 const int buttonNeutralPin = 5;
 char lastSentimentStatus = 'N';
@@ -58,8 +58,6 @@ DHTesp dht;
 
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
-
-const String deviceID = "Dev001";
 
 const char* ssid = "";
 const char* pass = "";
@@ -126,7 +124,7 @@ void setupLightSensor() {
 
 // MQTT is a publish-subscribe based, therefore a callback function is called whenever something is published on a topic that device is subscribed to
 void callback(char *topic, byte *payload, unsigned int length) { 
-  payload[length] = '\0'; // It's also a byte-safe protocol, therefore instead of transfering text, bytes are transfered and they aren't null terminated - so we need ot add \0 to terminate the string
+  payload[length] = '\0'; // It's also a binary-safe protocol, therefore instead of transfering text, bytes are transfered and they aren't null terminated - so we need ot add \0 to terminate the string
   String message = String((char *)payload); // After it's been terminated, it can be converted to String
 
   Logger.Info("Callback:" + String(topic) + ": " + message);
@@ -171,10 +169,10 @@ int getLightValue() { // Get the light value by reading the voltage on the light
   return map(lightValue, 0, 4096, 100, 0); // analogRead() returns values in range 0-4096, therefore we are scalling to 0-100
 }
 
-StaticJsonDocument<128> doc; // Create a JSON document we'll reuse to serialize our data into JSON
-String output = "";
-
 String getTelemetryData() { // Get the data and pack it in a JSON message
+  StaticJsonDocument<128> doc; // Create a JSON document we'll reuse to serialize our data into JSON
+  String output = "";
+
 	doc["Sentiment"]["Status"] = (String)lastSentimentStatus;
 
 	JsonObject Ambient = doc.createNestedObject("Ambient");
@@ -182,7 +180,7 @@ String getTelemetryData() { // Get the data and pack it in a JSON message
 	Ambient["Humidity"] = dht.getHumidity();
 	Ambient["Light"] = getLightValue();
 
-	doc["DeviceID"] = deviceID;
+	doc["DeviceID"] = (String)deviceId;
 
 	serializeJson(doc, output);
 
@@ -212,7 +210,7 @@ void sendTestMessageToIoTHub() {
   az_result res = az_iot_hub_client_telemetry_get_publish_topic(&client, NULL, publishTopic, 200, NULL ); // The receive topic isn't hardcoded and depends on chosen properties, therefore we need to use az_iot_hub_client_telemetry_get_publish_topic()
   Logger.Info(String(publishTopic));
   
-  mqttClient.publish(publishTopic, deviceID.c_str()); // Use https://github.com/Azure/azure-iot-explorer/releases to read the telemetry
+  mqttClient.publish(publishTopic, deviceId); // Use https://github.com/Azure/azure-iot-explorer/releases to read the telemetry
 }
 
 bool initIoTHub() {
