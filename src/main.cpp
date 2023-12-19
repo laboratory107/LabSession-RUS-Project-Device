@@ -7,18 +7,17 @@
 #include <ctime>
 #include "WiFiClientSecure.h"
 
-#include "ArduinoJson.h"
 #include "DHTesp.h"
 #include "PubSubClient.h"
+#include "ArduinoJson.h"
 
 /* Azure auth data */
-
-#define HOST ".."		 //[Azure IoT host name].azure-devices.net
-#define DEVICE_KEY ".."	 // Azure Primary key for device
-#define TOKEN_DURATION 60
+char* deviceKey = "..";	 // Azure Primary key for device
+const char* iotHubHost = "..";		 //[Azure IoT host name].azure-devices.net
+const int tokenDuration = 60;
 
 /* MQTT data for IoT Hub connection */
-const char* mqttBrokerURI = HOST;  // MQTT host = IoT Hub link
+const char* mqttBroker = iotHubHost;  // MQTT host = IoT Hub link
 const int mqttPort = AZ_IOT_DEFAULT_MQTT_CONNECT_PORT;	// Secure MQTT port
 const char* mqttC2DTopic = AZ_IOT_HUB_CLIENT_C2D_SUBSCRIBE_TOPIC;	// Topic where we can receive cloud to device messages
 
@@ -26,7 +25,7 @@ const char* mqttC2DTopic = AZ_IOT_HUB_CLIENT_C2D_SUBSCRIBE_TOPIC;	// Topic where
 // using the SDK functions in initIoTHub()
 char mqttClientId[128];
 char mqttUsername[128];
-char mqttPassword[200];
+char mqttPasswordBuffer[200];
 char publishTopic[200];
 
 /* Auth token requirements */
@@ -35,10 +34,10 @@ uint8_t sasSignatureBuffer[256];  // Make sure it's of correct size, it will jus
 
 az_iot_hub_client client;
 AzIoTSasToken sasToken(
-	&client, AZ_SPAN_FROM_STR(DEVICE_KEY),
+	&client, az_span_create_from_str(deviceKey),
 	AZ_SPAN_FROM_BUFFER(sasSignatureBuffer),
 	AZ_SPAN_FROM_BUFFER(
-		mqttPassword));	 // Authentication token for our specific device
+		mqttPasswordBuffer));	 // Authentication token for our specific device
 
 const char* deviceId = "Dev001";  // Device ID as specified in the list of devices on IoT Hub
 
@@ -99,6 +98,8 @@ void setupButtonInterrupts() { // We will be setting up all the buttons in PULLU
   attachInterruptArg(buttonNeutralPin, buttonISR, &neutralStatus, FALLING);
 }
 
+// Use pool pool.ntp.org to get the current time
+// Define a date on 1.1.2023. and wait until the current time has the same year (by default it's 1.1.1970.)
 void initializeTime() {	 // MANDATORY or SAS tokens won't generate
   Logger.Info("Setting time using SNTP");
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -110,7 +111,7 @@ void initializeTime() {	 // MANDATORY or SAS tokens won't generate
   {
     delay(500);
     Serial.print(".");
-    now = time(nullptr);
+    now = time(NULL);
   }
 }
 
@@ -133,7 +134,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 bool connectMQTT() {
   mqttClient.setBufferSize(1024); // The default size is defined in MQTT_MAX_PACKET_SIZE to be 256 bytes, which is too small for Azure MQTT messages, therefore needs to be increased or it will just crash without any info
 
-  Logger.Info("Generating SAS token");
+  if (sasToken.Generate(tokenDuration) != 0) {
   if (sasToken.Generate(TOKEN_DURATION) != 0) // SAS tokens need to be generated in order to generate a password for the connection
   {
     Logger.Error("Failed generating SAS token");
@@ -142,7 +143,7 @@ bool connectMQTT() {
   else
     Logger.Info("SAS token generated");
 
-  mqttClient.setServer(mqttBrokerURI, mqttPort);
+  mqttClient.setServer(mqttBroker, mqttPort);
   mqttClient.setCallback(callback);
 
   return true;
@@ -218,7 +219,7 @@ bool initIoTHub() {
 
   if (az_result_failed(az_iot_hub_client_init( // Create an instnace of IoT Hub client for our IoT Hub's host and the current device
           &client,
-          az_span_create((unsigned char *)HOST, strlen(HOST)),
+          az_span_create((unsigned char *)iotHubHost, strlen(iotHubHost)),
           az_span_create((unsigned char *)deviceId, strlen(deviceId)),
           &options)))
   {
@@ -245,7 +246,6 @@ bool initIoTHub() {
   Logger.Info("Great success");
   Logger.Info("Client ID: " + String(mqttClientId));
   Logger.Info("Username: " + String(mqttUsername));
-  Logger.Info("Password: " + (String)mqttPassword);
 
   return true;
 }
@@ -256,29 +256,26 @@ void setup() {
 
   if (initIoTHub()) {
     connectMQTT();
-    delay(200);
     mqttReconnect();
-    delay(200);
   }
+
+  sendTestMessageToIoTHub();
 
   setupLightSensor();
 	setupDHTSensor();
 	setupButtonInterrupts();
 
-  sendTestMessageToIoTHub();
   Logger.Info("Setup done");
 }
 
 
 void loop() { // No blocking in the loop, constantly check if we are connected and gather the data if necessary
-	if (!mqttClient.connected()) {
-    mqttReconnect();
-  }
-
+  if (!mqttClient.connected()) mqttReconnect();
   if (sasToken.IsExpired()) {
     connectMQTT();
   }
 
   mqttClient.loop();
+
   checkTelemetry();
 }
