@@ -175,11 +175,17 @@ String getTelemetryData() { // Get the data and pack it in a JSON message
 	doc["Sentiment"]["Status"] = (String)lastSentimentStatus;
 
 	JsonObject Ambient = doc.createNestedObject("Ambient");
-	Ambient["Temperature"] = dht.getTemperature();
+	/*Ambient["Temperature"] = dht.getTemperature();
 	Ambient["Humidity"] = dht.getHumidity();
 	Ambient["Light"] = getLightValue();
 
-	doc["DeviceID"] = (String)deviceId;
+	doc["DeviceID"] = (String)deviceId;*/
+	
+	Ambient["Temperature"] = 20;
+	Ambient["Humidity"] = 100;
+	Ambient["Light"] = 10;
+
+	doc["DeviceID"] = 1;
 
 	serializeJson(doc, output);
 
