@@ -15,6 +15,7 @@
 char* deviceKey = "..";	 // Azure Primary key for device
 const char* iotHubHost = "..";		 //[Azure IoT host name].azure-devices.net
 const int tokenDuration = 60;
+const char* deviceId = "Dev001";  // Device ID as specified in the list of devices on IoT Hub
 
 /* MQTT data for IoT Hub connection */
 const char* mqttBroker = iotHubHost;  // MQTT host = IoT Hub link
@@ -38,8 +39,6 @@ AzIoTSasToken sasToken(
 	AZ_SPAN_FROM_BUFFER(sasSignatureBuffer),
 	AZ_SPAN_FROM_BUFFER(
 		mqttPasswordBuffer));	 // Authentication token for our specific device
-
-const char* deviceId = "Dev001";  // Device ID as specified in the list of devices on IoT Hub
 
 /* Pin definitions and library instance(s) */
 const int lightPin = 35;
@@ -134,8 +133,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 bool connectMQTT() {
   mqttClient.setBufferSize(1024); // The default size is defined in MQTT_MAX_PACKET_SIZE to be 256 bytes, which is too small for Azure MQTT messages, therefore needs to be increased or it will just crash without any info
 
-  if (sasToken.Generate(tokenDuration) != 0) {
-  if (sasToken.Generate(TOKEN_DURATION) != 0) // SAS tokens need to be generated in order to generate a password for the connection
+  if (sasToken.Generate(tokenDuration) != 0) // SAS tokens need to be generated in order to generate a password for the connection
   {
     Logger.Error("Failed generating SAS token");
     return false;
